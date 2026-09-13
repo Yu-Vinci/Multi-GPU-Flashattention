@@ -1,205 +1,78 @@
-# Multi-GPU FlashAttention
+# Multi-GPU FlashAttention — Ring Attention Research Prototype
 
-Research prototype for workload modeling, scheduling, and Ring-Attention-style
-multi-GPU execution for FlashAttention-like workloads.
+Research code for attention workload modeling, static scheduling, and Ring Attention execution with CUDA and MPI/NCCL.
 
-The project started from workload modeling and scheduling experiments, and is
-now being extended toward a real multi-GPU Ring Attention prototype with MPI,
-CUDA-aware MPI, staged MPI, and NCCL communication backends.
+This repository contains the earlier C/CUDA prototype. Scheduling experiments and GPU execution are separate components in this published snapshot. The newer local C++ revision and its experiment results are not included here.
 
-## Current Focus
+## Where to start
 
-The current active direction is:
+| Area | Purpose | Guide |
+| --- | --- | --- |
+| Workload and scheduling | Task generation, Round-Robin, LPT and contiguous partitions | [workload/README.md](workload/README.md) |
+| Ring Attention | Benchmark variants, reference checking and shard debugging | [ring/attention/README.md](ring/attention/README.md) |
+| Communication only | Ring data exchange without attention | [ring/loop/README.md](ring/loop/README.md) |
+| Single-GPU experiments | Python timing scripts using the external `flash-attn` package | [tests/](tests/) |
 
-- model attention workload distribution;
-- compare communication backends for ring-style data exchange;
-- implement Ring Attention benchmark variants;
-- add compute/communication overlap;
-- verify overlap correctness against a full reference implementation;
-- make token/KV shard ownership visible for debugging future load balancing.
+The related [ring-attention-benchmark](https://github.com/3429495086/ring-attention-benchmark) repository packages communication and attention experiments with a shared Makefile and cluster launch scripts. Use this repository to explore the research components, and that package for its standalone benchmark workflow.
 
-The most recent experimental work is under:
+## Published implementation
 
-```text
-ring/attention/bench/
-```
+- C workload generation and block/row scheduling baselines.
+- Staged MPI, CUDA-aware MPI and NCCL ring experiments.
+- Blocking and nonblocking MPI variants, with staged/CUDA-aware overlap variants.
+- Output dumps, a CPU full-reference checker and shard-owner debug output.
 
-See `ring/attention/README.md` for build, run, correctness, and shard-debug
-instructions.
+The local CUDA attention kernels are research baselines. This repository is not the upstream FlashAttention library or a full-model training implementation. Python experiments call `flash-attn` separately; comparisons with the ring benchmarks must match shapes, precision and timing scope.
 
-## Project Structure
+## Quick start
 
-```text
-project/
-├── workload/
-├── ring/
-│   ├── loop/
-│   └── attention/
-├── tests/
-└── README.md
-```
+### CPU workload demo
 
-### `workload/`
-
-Workload modeling and scheduling prototype.
-
-Main contents:
-
-- `workload.c`, `workload.h`: attention block generation, mask handling, and cost modeling.
-- `scheduler.c`, `scheduler.h`: scheduling algorithms and row/block partitioning logic.
-- `demo.c`: command-line demo for scheduling experiments.
-- `run_experiments.sh`: helper script for preset experiments.
-- `README.md`: detailed notes about workload variables and scheduler internals.
-
-This part answers questions such as:
-
-- how many active attention elements each block contains;
-- how block-level and row-level work differ;
-- how balanced Round-Robin, LPT, row-level LPT, and contiguous DP partitions are.
-
-### `ring/`
-
-Multi-GPU ring communication and Ring Attention experiments.
-
-Main contents:
-
-- `ring/loop/`: pure ring communication benchmarks without attention computation.
-- `ring/attention/`: Ring Attention benchmark and correctness code.
-- `ring_cuda.cu`, `ring_test.c`, `check_peer.cu`: earlier ring/CUDA experiments and utilities.
-
-See `ring/README.md` for the Ring experiment overview.
-
-### `ring/loop/`
-
-Pure communication benchmarks. These measure only ring data movement with
-different backends:
-
-- staged MPI;
-- staged MPI with `MPI_Isend/Irecv`;
-- CUDA-aware MPI;
-- CUDA-aware MPI with `MPI_Isend/Irecv`;
-- NCCL point-to-point.
-
-This part is useful for separating communication cost from full attention cost.
-
-See `ring/loop/README.md` for usage.
-
-### `ring/attention/`
-
-Ring Attention benchmark implementations.
-
-Main contents:
-
-- `bench/`: current benchmark entry point.
-- `common/`: shared helpers such as local CUDA device selection and shard-owner utilities.
-- `verify_full.c`: full reference checker for benchmark outputs.
-- `gpu/`: older implementation area kept for reference, not the current experiment entry point.
-
-Current benchmark features:
-
-- staged MPI, CUDA-aware MPI, and NCCL backends;
-- blocking and `MPI_Isend/Irecv` variants;
-- overlap variants for staged and CUDA-aware MPI;
-- optional output dump for correctness checking;
-- optional shard-owner debug logging with `ATTENTION_PRINT_SHARDS=1`;
-- correctness comparison against a full reference.
-
-See `ring/attention/README.md` for details.
-
-### `tests/`
-
-Python single-GPU FlashAttention timing experiments.
-
-Main contents:
-
-- `benchmark_single_gpu_shapes.py`: benchmarks different attention shapes.
-- `single_gpu_baseline.py`: simpler baseline timing script.
-
-This part is separate from the MPI Ring Attention experiments.
-
-## Requirements
-
-For workload modeling:
-
-- GCC or Clang with C11 support.
-
-For Ring Attention / communication benchmarks:
-
-- NVIDIA GPU;
-- CUDA toolkit;
-- MPI implementation;
-- NCCL for NCCL benchmarks.
-
-For Python single-GPU tests:
-
-- Python 3.9+;
-- PyTorch with CUDA support;
-- `flash-attn`.
-
-## Quick Start
-
-### Workload demo
+Requires GCC or Clang with C11 support; no GPU is needed.
 
 ```bash
-cd project/workload
-gcc -O2 -std=c11 -o demo demo.c scheduler.c workload.c
+git clone https://github.com/3429495086/Multi-GPU-Flashattention.git
+cd Multi-GPU-Flashattention/workload
+gcc -O2 -std=c11 -o demo demo.c scheduler.c workload.c -lm
 ./demo --seq 4096 --gpus 2 --mask causal
 ```
 
-### Ring Attention correctness check
+### GPU correctness check
 
-Run on the GPU server from `project/ring/attention/bench`:
+From the cloned repository root, run on a GPU server with a CUDA toolkit, Python 3 and CUDA-aware MPI. Replace the installation paths before running. NCCL is needed for the separate NCCL benchmarks.
 
 ```bash
-cd project/ring/attention/bench
-
-CUDA_HOME=/opt/cuda/current \
-MPI_HOME=/nethome/nvidia/hpc_sdk/Linux_x86_64/24.3/comm_libs/12.3/openmpi4/openmpi-4.1.5 \
-NP=2 SIZE=262144 WARMUP=1 ITERS=1 \
-./check_attention_correctness.sh
+export CUDA_HOME=/path/to/cuda
+export MPI_HOME=/path/to/cuda-aware-mpi
+cd ring/attention/bench
+NP=2 SIZE=262144 WARMUP=1 ITERS=1 bash check_attention_correctness.sh
 ```
 
-Expected result:
+The script builds four MPI attention variants and the CPU verifier, checks each output against the full reference, and compares nonblocking baselines with their overlap variants. A passing run covers the tested configuration, not every possible input or GPU topology.
+
+See [the attention guide](ring/attention/README.md) for build details, output formats and `ATTENTION_PRINT_SHARDS=1` debugging.
+
+## Repository layout
 
 ```text
-Overall: ALL PASS
-staged_Isendrecv_vs_overlap: PASS
-cuda_aware_Isendrecv_vs_overlap: PASS
+.
+├── workload/             # C workload model and scheduling experiments
+├── ring/
+│   ├── loop/             # Communication-only experiments
+│   └── attention/
+│       ├── bench/        # Benchmark variants and correctness script
+│       ├── common/       # Device and shard helpers
+│       ├── gpu/          # Earlier GPU variants
+│       └── verify_full.c # CPU reference
+└── tests/                # Python single-GPU timing scripts
 ```
 
-### Ring Attention shard debug
+The Python scripts require PyTorch with CUDA support and `flash-attn`. They are separate from the MPI benchmark build.
 
-```bash
-cd project/ring/attention/bench
+## Scope and next steps
 
-ATTENTION_PRINT_SHARDS=1 \
-/nethome/nvidia/hpc_sdk/Linux_x86_64/24.3/comm_libs/12.3/openmpi4/openmpi-4.1.5/bin/mpirun \
--np 2 ./ring_attention_cuda_aware_Isendrecv_overlap_gpu_bench 262144 1 1
-```
-
-This prints which Q/KV token range each rank owns and which KV shard is computed
-or received at each ring step.
-
-## Current Status
-
-Completed:
-
-- attention workload modeling;
-- block-level and row-level scheduling baselines;
-- pure ring communication benchmarks;
-- Ring Attention benchmark variants;
-- staged and CUDA-aware overlap benchmarks;
-- full-reference correctness checking;
-- shard-owner debug output for benchmark files.
-
-In progress / future work:
-
-- clearer connection between workload scheduler output and Ring Attention execution;
-- communication-aware scheduling cost terms;
-- dynamic load balancing;
-- heterogeneous GPU scheduling;
-- future replacement of the placeholder attention kernel with a more realistic FlashAttention-style implementation.
+This published snapshot explores ring communication, overlap and correctness. Runtime integration of scheduling decisions, communication-aware scheduling and heterogeneous GPU evaluation remain follow-up work for this version. Performance observations should identify the source revision, hardware, problem shape, backend and timing method.
 
 ## Author
 
-Yuvinci
+Yu Gang (Yuvinci)
