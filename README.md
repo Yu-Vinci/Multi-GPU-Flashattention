@@ -13,7 +13,7 @@ This repository contains the earlier C/CUDA prototype. Scheduling experiments an
 | Communication only | Ring data exchange without attention | [ring/loop/README.md](ring/loop/README.md) |
 | Single-GPU experiments | Python timing scripts using the external `flash-attn` package | [tests/](tests/) |
 
-The related [ring-attention-benchmark](https://github.com/3429495086/ring-attention-benchmark) repository packages communication and attention experiments with a shared Makefile and cluster launch scripts. Use this repository to explore the research components, and that package for its standalone benchmark workflow.
+The related [ring-attention-benchmark](https://github.com/Yu-Vinci/ring-attention-benchmark) repository packages communication and attention experiments with a shared Makefile and cluster launch scripts. Use this repository to explore the research components, and that package for its standalone benchmark workflow.
 
 ## Published implementation
 
@@ -31,7 +31,7 @@ The local CUDA attention kernels are research baselines. This repository is not 
 Requires GCC or Clang with C11 support; no GPU is needed.
 
 ```bash
-git clone https://github.com/3429495086/Multi-GPU-Flashattention.git
+git clone https://github.com/Yu-Vinci/Multi-GPU-Flashattention.git
 cd Multi-GPU-Flashattention/workload
 gcc -O2 -std=c11 -o demo demo.c scheduler.c workload.c -lm
 ./demo --seq 4096 --gpus 2 --mask causal
@@ -75,4 +75,4 @@ This published snapshot explores ring communication, overlap and correctness. Ru
 
 ## Author
 
-Yu Gang (Yuvinci)
+Gang Yu (@Yu-Vinci)
